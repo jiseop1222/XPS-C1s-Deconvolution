@@ -5,7 +5,7 @@ import matplotlib.pyplot as plt
 import streamlit as st
 from lmfit import Model, Parameters
 
-st.set_page_config(page_title="XPS C1s Deconvolution Web App", layout="wide")
+st.set_page_config(page_title="XPS C1s Deconvolution", layout="wide")
 st.title("🔬 XPS C1s Auto Deconvolution Web App")
 st.caption("Colab Pseudo-Voigt (lmfit) 피팅 로직 기반 웹 애플리케이션")
 
