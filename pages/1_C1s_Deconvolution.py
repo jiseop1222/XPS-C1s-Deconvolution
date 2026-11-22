@@ -128,20 +128,20 @@ with st.sidebar:
     st.header("4. 피팅 공통 옵션")
     init_amp = st.number_input("(1) 초기 Amplitude", value=1000.0, min_value=1.0, step=100.0)
     st.caption(
-        "※ 각주 (1) 초기 Amplitude: 피팅 시작 시 각 피크 높이의 초기값(하한 0)입니다. "
+        "※ 초기 Amplitude: 피팅 시작 시 각 피크 높이의 초기값(하한 0)입니다. "
         "입력 스펙트럼 Intensity 크기에 맞춰 설정하면 수렴 안정성이 높아집니다."
     )
 
     init_sigma = st.number_input("(2) 초기 Sigma (eV)", value=0.6, min_value=0.05, step=0.05)
     fix_sigma = st.checkbox("Sigma 고정", value=False)
     st.caption(
-        "※ 각주 (2) 초기 Sigma (eV): 피크 폭 스케일 파라미터(0.05~5.0 eV)입니다. "
+        "※ 초기 Sigma (eV): 피크 폭 스케일 파라미터(0.05~5.0 eV)입니다. "
         "'Sigma 고정'을 켜면 입력값으로 고정하고, 끄면 피팅 과정에서 자유롭게 최적화됩니다."
     )
 
     init_lorentz = st.slider("(3) 초기 Lorentzian ratio", min_value=0.0, max_value=1.0, value=0.5, step=0.05)
     st.caption(
-        "※ 각주 (3) 초기 Lorentzian ratio: Pseudo-Voigt 함수에서 Lorentzian 성분 혼합 비율"
+        "※ 초기 Lorentzian ratio: Pseudo-Voigt 함수에서 Lorentzian 성분 혼합 비율"
         "(0.0=완전 Gaussian, 1.0=완전 Lorentzian)의 초기값입니다."
     )
 
@@ -161,7 +161,7 @@ peaks_df = st.data_editor(
     use_container_width=True,
     key="peaks_editor"
 )
-st.caption("※ 각주: 피크 중심 이동 허용 범위(Tolerance)는 **0.2 ~ 0.3 eV** 설정을 권장합니다.")
+st.caption("※ 피크 중심 이동 허용 범위(Tolerance)는 **0.2 ~ 0.3 eV** 설정을 권장합니다.")
 
 if uploaded_file is not None:
     try:
