@@ -1,13 +1,23 @@
 import io
+from pathlib import Path
+import sys
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
 from lmfit import Model, Parameters
 
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
+
+from auth_db import require_login, save_history_record
+
 st.set_page_config(page_title="XPS N1s Deconvolution", layout="wide")
+current_user = require_login()
+
 st.title("🔬 XPS N1s Deconvolution")
-st.caption("데이터 업로드 · 정렬 · 백그라운드 제거 · Pseudo-Voigt 피팅 및 결과 다운로드")
+st.caption(f"로그인 계정: {current_user['email']} · 데이터 업로드 · 정렬 · 백그라운드 제거 · Pseudo-Voigt 피팅")
 
 
 def sanitize_prefix(name: str) -> str:
@@ -98,7 +108,6 @@ def pseudo_voigt(x, amplitude, center, sigma, fraction_lorentzian):
     return (1.0 - fraction_lorentzian) * g + fraction_lorentzian * l
 
 
-# ---------------- 사이드바 설정 ----------------
 with st.sidebar:
     st.header("1. 데이터 업로드")
     uploaded_file = st.file_uploader(
@@ -124,7 +133,6 @@ with st.sidebar:
     init_lorentz = st.slider("Lorentzian 비율", min_value=0.0, max_value=1.0, value=0.5, step=0.05)
 
 
-# ---------------- 피크 목록 설정 ----------------
 st.subheader("N1s 피크 목록 및 Tolerance 설정")
 default_peaks_df = pd.DataFrame([
     {"Peak Name": "Pyridinic N", "Center (eV)": 398.30, "Tolerance (±eV)": 0.30},
@@ -142,7 +150,6 @@ peaks_df = st.data_editor(
 )
 
 
-# ---------------- 데이터 로드 및 Deconvolution ----------------
 if uploaded_file is not None:
     try:
         raw_bytes = uploaded_file.getvalue().decode("utf-8", errors="ignore")
@@ -249,7 +256,6 @@ if uploaded_file is not None:
             summary_df = pd.DataFrame(summary_rows)
             st.dataframe(summary_df, use_container_width=True)
 
-            # 시각화
             fig, ax = plt.subplots(figsize=(10, 6))
             ax.plot(be_aligned, corrected_intensity, "r.", markersize=3, label="Corrected Data")
             ax.plot(be_aligned, result.best_fit, "k-", lw=2.0, label="Total Fit")
@@ -265,7 +271,6 @@ if uploaded_file is not None:
             ax.legend(loc="best", fontsize=8)
             st.pyplot(fig)
 
-            # 결과 파일 다운로드 (.txt / .csv)
             export_cols = (
                 [be_aligned, int_raw, corrected_intensity, result.best_fit]
                 + [comp_curves[n] for n, _ in peak_entries]
@@ -297,6 +302,47 @@ if uploaded_file is not None:
                     file_name="xps_n1s_deconvolution_result.csv",
                     mime="text/csv",
                 )
+
+            peak_list = [
+                {
+                    "Peak Name": str(row["Peak Name"]).strip(),
+                    "Center (eV)": float(row["Center (eV)"]),
+                    "Tolerance (±eV)": float(row["Tolerance (±eV)"]) if pd.notna(row["Tolerance (±eV)"]) else 0.3,
+                }
+                for _, row in valid_peaks.iterrows()
+            ]
+
+            saved_name = save_history_record(
+                owner_email=current_user["email"],
+                element="N1s",
+                uploaded_filename=uploaded_file.name,
+                bg_mode=bg_mode,
+                lorentzian_ratio=init_lorentz,
+                payload={
+                    "element": "N1s",
+                    "uploaded_filename": uploaded_file.name,
+                    "r2_score": round(float(r2_score), 6),
+                    "peak_alignment": {
+                        "enabled": bool(enable_align),
+                        "target_peak_eV": float(target_peak),
+                        "range_eV": [float(search_min), float(search_max)],
+                    },
+                    "background": {
+                        "method": bg_mode,
+                        "range_eV": [float(bg_start), float(bg_end)],
+                    },
+                    "fitting_options": {
+                        "initial_amplitude": float(init_amp),
+                        "initial_sigma_eV": float(init_sigma),
+                        "fix_sigma": bool(fix_sigma),
+                        "initial_lorentzian_ratio": float(init_lorentz),
+                    },
+                    "binding_energy_peaks": peak_list,
+                    "fitted_summary": summary_df.to_dict(orient="records"),
+                    "deconvolved_data": csv_df.to_dict(orient="records"),
+                },
+            )
+            st.success(f"영구 저장 완료 ({current_user['email']}): `{saved_name}`")
 
     except Exception as e:
         st.error(f"처리 중 오류가 발생했습니다: {e}")
