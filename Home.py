@@ -117,3 +117,19 @@ with col3:
     )
     if Path("pages/3_Data_History.py").exists():
         st.page_link("pages/3_Data_History.py", label="Open History →", use_container_width=True)
+
+st.markdown("---")
+col4, _ = st.columns([1.2, 2])
+with col4:
+    st.markdown(
+        '<div class="minimal-card"><div class="minimal-tag">04 · PREDICTION</div>'
+        '<strong>Conductivity &amp; Temp Predictor</strong><br><span style="opacity:0.75;font-size:0.9rem;">'
+        'Predict conductivity and required carbonization temperature from XPS ratios.</span></div>',
+        unsafe_allow_html=True,
+    )
+    if Path("pages/4_Conductivity_Temp_Predictor.py").exists():
+        st.page_link(
+            "pages/4_Conductivity_Temp_Predictor.py",
+            label="Open Predictor →",
+            use_container_width=True,
+        )
