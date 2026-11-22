@@ -13,18 +13,22 @@ if str(ROOT_DIR) not in sys.path:
 
 from auth_db import require_login, save_history_record
 
-st.set_page_config(page_title="XPS N1s Deconvolution", layout="wide")
+st.set_page_config(page_title="N1s · XPS Deconvolution", page_icon="◈", layout="wide")
 current_user = require_login()
 
-st.title("🔬 XPS N1s Deconvolution")
-st.caption(f"로그인 계정: {current_user['email']} · 데이터 업로드(.txt, .csv, .dat) · 정렬 · 백그라운드 제거 · Pseudo-Voigt 피팅")
+plt.rcParams["axes.spines.top"] = False
+plt.rcParams["axes.spines.right"] = False
+
+st.caption("HOME / N1s DECONVOLUTION")
+st.title("◈ XPS N1s Deconvolution")
+st.caption(f"Signed in as `{current_user['email']}` · Pseudo-Voigt (`lmfit`)")
 
 st.info(
     "**Information**\n"
-    "- **(1) Data Format:** `Binding Energy (eV)`, `Intensity (a.u.)` 두 열로 구성된 **`.txt`, `.csv`, `.dat` 파일**을 지원합니다 "
-    "(쉼표 또는 공백/탭 구분, 헤더나 주석 행은 자동 제외).\n"
-    "- **(2) 원본 데이터 피팅 vs Auto Align:** `Auto Align 사용`을 켜면 지정 범위 내 최대 피크를 기준 피크(`400.7 eV`)로 이동 보정한 뒤 피팅하고, "
-    "끄면 축 이동 없이 입력 데이터 기준으로 바로 피팅합니다."
+    "- **(1) Data Format:** Upload two-column (`Binding Energy (eV)`, `Intensity (a.u.)`) **`.txt`, `.csv`, or `.dat`** files "
+    "(comma, space, or tab separated; non-numeric header/comment lines are ignored).\n"
+    "- **(2) Raw Data Fitting vs. Auto Align:** Enabling **Auto Align** shifts the spectrum so the maximum peak within the search "
+    "window aligns to the reference position (`400.7 eV`) before fitting; disabling it fits the input spectrum without energy shift."
 )
 
 
@@ -117,45 +121,45 @@ def pseudo_voigt(x, amplitude, center, sigma, fraction_lorentzian):
 
 
 with st.sidebar:
-    st.header("1. 데이터 업로드")
+    st.header("1. Spectrum Upload")
     uploaded_file = st.file_uploader(
-        "Binding Energy, Intensity 파일 (.txt, .csv, .dat)",
+        "Binding Energy, Intensity (.txt, .csv, .dat)",
         type=["txt", "csv", "dat"],
     )
 
-    st.header("2. Auto Align (기준 피크 보정)")
-    enable_align = st.checkbox("Auto Align 사용", value=False)
-    target_peak = st.number_input("기준 피크 위치 (eV)", value=400.7, step=0.1)
-    search_min = st.number_input("탐색 시작 (eV)", value=396.0, step=0.5)
-    search_max = st.number_input("탐색 종료 (eV)", value=402.0, step=0.5)
+    st.header("2. Peak Alignment")
+    enable_align = st.checkbox("Enable Auto Align", value=False)
+    target_peak = st.number_input("Reference Peak (eV)", value=400.7, step=0.1)
+    search_min = st.number_input("Search Start (eV)", value=396.0, step=0.5)
+    search_max = st.number_input("Search End (eV)", value=402.0, step=0.5)
 
-    st.header("3. Background 제거")
-    bg_mode = st.selectbox("Background 방식", ["None", "Linear", "Shirley (Iterative)"], index=0)
-    bg_start = st.number_input("BG 시작 에너지 (eV)", value=406.0, step=0.5)
-    bg_end = st.number_input("BG 종료 에너지 (eV)", value=395.0, step=0.5)
+    st.header("3. Background")
+    bg_mode = st.selectbox("Background Method", ["None", "Linear", "Shirley (Iterative)"], index=0)
+    bg_start = st.number_input("BG Start (eV)", value=406.0, step=0.5)
+    bg_end = st.number_input("BG End (eV)", value=395.0, step=0.5)
 
-    st.header("4. 피팅 파라미터 설정")
-    init_amp = st.number_input("(1) 초기 Amplitude", value=1000.0, min_value=1.0, step=50.0)
+    st.header("4. Fitting Options")
+    init_amp = st.number_input("(1) Initial Amplitude", value=1000.0, min_value=1.0, step=50.0)
     st.caption(
-        "* 초기 Amplitude: 피팅 시작 시 각 피크 높이의 초기값(하한 0)입니다. "
-        "스펙트럼 강도 수준에 맞춰 설정하면 최적화 안정성에 도움이 됩니다."
+        "※ Footnote (1) Initial Amplitude: Starting peak height (lower bound 0) for non-linear least-squares fitting; "
+        "matching your spectrum intensity scale improves convergence."
     )
 
-    init_sigma = st.number_input("(2) 초기 Sigma (eV)", value=0.6, min_value=0.05, step=0.05)
-    fix_sigma = st.checkbox("Sigma 고정", value=True)
+    init_sigma = st.number_input("(2) Initial Sigma (eV)", value=0.6, min_value=0.05, step=0.05)
+    fix_sigma = st.checkbox("Fix Sigma", value=True)
     st.caption(
-        "* 초기 Sigma (eV): 피크 폭 스케일 파라미터(0.05~5.0 eV)입니다. "
-        "'Sigma 고정'을 켜면 입력값으로 유지하고, 끄면 피팅 과정에서 최적화됩니다."
+        "※ Footnote (2) Initial Sigma (eV): Peak width scale parameter (0.05–5.0 eV). "
+        "Check 'Fix Sigma' to keep it constant or uncheck to optimize during fitting."
     )
 
-    init_lorentz = st.slider("(3) 초기 Lorentzian ratio", min_value=0.0, max_value=1.0, value=0.5, step=0.05)
+    init_lorentz = st.slider("(3) Initial Lorentzian Ratio", min_value=0.0, max_value=1.0, value=0.5, step=0.05)
     st.caption(
-        "* 초기 Lorentzian ratio: Pseudo-Voigt 피크 형태의 Lorentzian 비율"
-        "(0.0=완전 Gaussian, 1.0=완전 Lorentzian) 초기값입니다."
+        "※ Footnote (3) Initial Lorentzian Ratio: Initial Lorentzian fraction in Pseudo-Voigt "
+        "(0.0 = pure Gaussian, 1.0 = pure Lorentzian)."
     )
 
 
-st.subheader("N1s 피크 목록 및 Tolerance 설정")
+st.subheader("Binding Energy Peaks")
 default_peaks_df = pd.DataFrame([
     {"Peak Name": "Pyridinic N", "Center (eV)": 398.30, "Tolerance (±eV)": 0.30},
     {"Peak Name": "NH2", "Center (eV)": 399.10, "Tolerance (±eV)": 0.30},
@@ -170,7 +174,7 @@ peaks_df = st.data_editor(
     use_container_width=True,
     key="n1s_peaks_editor",
 )
-st.caption("* 피크 중심 이동 허용 범위(Tolerance)는 **0.2 ~ 0.3 eV** 설정을 권장합니다.")
+st.caption("※ Footnote: Recommended peak center **Tolerance** is **0.2 – 0.3 eV**.")
 
 
 if uploaded_file is not None:
@@ -187,7 +191,7 @@ if uploaded_file is not None:
                     continue
 
         if len(numeric_rows) < 5:
-            st.error("유효한 숫자 데이터(Binding Energy, Intensity)를 충분히 읽지 못했습니다.")
+            st.error("Insufficient numeric data rows (Binding Energy, Intensity).")
             st.stop()
 
         data = np.array(numeric_rows)
@@ -199,9 +203,9 @@ if uploaded_file is not None:
                 be_raw, int_raw, target_peak, search_min, search_max
             )
             if detected_pos is not None:
-                st.info(f"Auto Align 적용: {detected_pos:.2f} eV 감지 → {shift_val:+.2f} eV 보정")
+                st.caption(f"Auto Align: detected `{detected_pos:.2f} eV` → shifted `{shift_val:+.2f} eV`")
             else:
-                st.warning("지정 범위 내 피크를 찾지 못해 정렬을 건너뛰었습니다.")
+                st.warning("No peak found in the specified search range; skipped alignment.")
         else:
             be_aligned = be_raw.copy()
 
@@ -211,10 +215,10 @@ if uploaded_file is not None:
         valid_peaks = valid_peaks[valid_peaks["Peak Name"].astype(str).str.strip() != ""]
 
         if len(valid_peaks) == 0:
-            st.warning("최소 1개 이상의 피크를 입력해 주세요.")
+            st.warning("Please specify at least one peak.")
             st.stop()
 
-        if st.button("🚀 Deconvolution 실행", type="primary"):
+        if st.button("Run Deconvolution", type="primary"):
             models = []
             params = Parameters()
             peak_entries = []
@@ -250,7 +254,7 @@ if uploaded_file is not None:
             r2_score = 1.0 - (ss_res / ss_tot) if ss_tot > 0 else 0.0
 
             st.divider()
-            st.subheader(f"Deconvolution 결과 (R² = {r2_score:.5f})")
+            st.subheader(f"Fit Result · R² = {r2_score:.5f}")
 
             amps = {name: result.params[f"{prefix}amplitude"].value for name, prefix in peak_entries}
             total_amp = sum(amps.values())
@@ -279,19 +283,19 @@ if uploaded_file is not None:
             summary_df = pd.DataFrame(summary_rows)
             st.dataframe(summary_df, use_container_width=True)
 
-            fig, ax = plt.subplots(figsize=(10, 6))
-            ax.plot(be_aligned, corrected_intensity, "r.", markersize=3, label="Corrected Data")
-            ax.plot(be_aligned, result.best_fit, "k-", lw=2.0, label="Total Fit")
+            fig, ax = plt.subplots(figsize=(10, 5.5))
+            ax.plot(be_aligned, corrected_intensity, "o", color="#d9534f", markersize=2.5, alpha=0.85, label="Corrected Data")
+            ax.plot(be_aligned, result.best_fit, "-", color="#111111", lw=1.8, label="Total Fit")
 
             for name, comp in comp_curves.items():
                 pct = summary_df.loc[summary_df["Peak Name"] == name, "Contribution (%)"].values[0]
-                ax.plot(be_aligned, comp, "--", lw=1.3, label=f"{name} ({pct:.1f}%)")
+                ax.plot(be_aligned, comp, "--", lw=1.2, label=f"{name} ({pct:.1f}%)")
 
             ax.set_xlabel("Binding Energy (eV)")
             ax.set_ylabel("Intensity (a.u.)")
             ax.set_title("XPS N1s Deconvolution")
             ax.invert_xaxis()
-            ax.legend(loc="best", fontsize=8)
+            ax.legend(loc="best", frameon=False, fontsize=8)
             st.pyplot(fig)
 
             export_cols = (
@@ -313,14 +317,14 @@ if uploaded_file is not None:
             col1, col2 = st.columns(2)
             with col1:
                 st.download_button(
-                    label="📥 피팅 결과 다운로드 (.txt)",
+                    label="Export (.txt)",
                     data=txt_buf.getvalue().encode("utf-8"),
                     file_name="xps_n1s_deconvolution_result.txt",
                     mime="text/plain",
                 )
             with col2:
                 st.download_button(
-                    label="📥 피팅 결과 다운로드 (.csv)",
+                    label="Export (.csv)",
                     data=csv_bytes,
                     file_name="xps_n1s_deconvolution_result.csv",
                     mime="text/csv",
@@ -365,9 +369,9 @@ if uploaded_file is not None:
                     "deconvolved_data": csv_df.to_dict(orient="records"),
                 },
             )
-            st.success(f"영구 저장 완료 ({current_user['email']}): `{saved_name}`")
+            st.success(f"Saved to history: `{saved_name}`")
 
     except Exception as e:
-        st.error(f"처리 중 오류가 발생했습니다: {e}")
+        st.error(f"Error processing file: {e}")
 else:
-    st.info("왼쪽 사이드바에서 XPS N1s 데이터 파일(`.txt`, `.csv`, `.dat`)을 업로드해 주세요.")
+    st.info("Upload an N1s spectrum file (`.txt`, `.csv`, `.dat`) in the sidebar.")
