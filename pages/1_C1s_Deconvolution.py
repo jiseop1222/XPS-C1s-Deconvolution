@@ -17,11 +17,11 @@ st.set_page_config(page_title="XPS C1s Deconvolution", layout="wide")
 current_user = require_login()
 
 st.title("🔬 XPS C1s Auto Deconvolution Web App")
-st.caption(f"로그인 계정: {current_user['email']} · Pseudo-Voigt (lmfit) 피팅 기반 (.txt 전용)")
+st.caption(f"로그인 계정: {current_user['email']} · Pseudo-Voigt (lmfit) 피팅 기반 (.txt, .csv, .dat 지원)")
 
 st.info(
     "**Information**\n"
-    "- **(1) Data Format:** `Binding Energy (eV)`, `Intensity (a.u.)` 두 열로 구성된 **`.txt` 파일만** 지원합니다 "
+    "- **(1) Data Format:** `Binding Energy (eV)`, `Intensity (a.u.)` 두 열로 구성된 **`.txt`, `.csv`, `.dat` 파일**을 지원합니다 "
     "(쉼표 또는 공백/탭 구분, 헤더나 주석 행은 자동 제외).\n"
     "- **(2) 원본 데이터 피팅 vs Auto Align:** `Auto Align 활성화`를 켜면 지정 범위 내 최대 피크를 기준 피크(`284.4 eV`)로 이동 보정한 뒤 피팅하고, "
     "끄면 축 이동 없이 입력 데이터 기준으로 바로 피팅합니다."
@@ -111,8 +111,8 @@ def pseudo_voigt(x, amplitude, center, sigma, fraction_lorentzian):
 
 
 with st.sidebar:
-    st.header("1. XPS 데이터 업로드 (.txt)")
-    uploaded_file = st.file_uploader("Binding Energy, Intensity (.txt)", type=["txt"])
+    st.header("1. XPS 데이터 업로드")
+    uploaded_file = st.file_uploader("Binding Energy, Intensity 파일 (.txt, .csv, .dat)", type=["txt", "csv", "dat"])
 
     st.header("2. Peak Alignment (보정)")
     enable_align = st.checkbox("Auto Align 활성화", value=True)
@@ -128,20 +128,20 @@ with st.sidebar:
     st.header("4. 피팅 공통 옵션")
     init_amp = st.number_input("(1) 초기 Amplitude", value=1000.0, min_value=1.0, step=100.0)
     st.caption(
-        "※ 초기 Amplitude: 피팅 시작 시 각 피크 높이의 초기값(하한 0)입니다. "
+        "※ 각주 (1) 초기 Amplitude: 피팅 시작 시 각 피크 높이의 초기값(하한 0)입니다. "
         "입력 스펙트럼 Intensity 크기에 맞춰 설정하면 수렴 안정성이 높아집니다."
     )
 
     init_sigma = st.number_input("(2) 초기 Sigma (eV)", value=0.6, min_value=0.05, step=0.05)
     fix_sigma = st.checkbox("Sigma 고정", value=False)
     st.caption(
-        "※ 초기 Sigma (eV): 피크 폭 스케일 파라미터(0.05~5.0 eV)입니다. "
+        "※ 각주 (2) 초기 Sigma (eV): 피크 폭 스케일 파라미터(0.05~5.0 eV)입니다. "
         "'Sigma 고정'을 켜면 입력값으로 고정하고, 끄면 피팅 과정에서 자유롭게 최적화됩니다."
     )
 
     init_lorentz = st.slider("(3) 초기 Lorentzian ratio", min_value=0.0, max_value=1.0, value=0.5, step=0.05)
     st.caption(
-        "※ 초기 Lorentzian ratio: Pseudo-Voigt 함수에서 Lorentzian 성분 혼합 비율"
+        "※ 각주 (3) 초기 Lorentzian ratio: Pseudo-Voigt 함수에서 Lorentzian 성분 혼합 비율"
         "(0.0=완전 Gaussian, 1.0=완전 Lorentzian)의 초기값입니다."
     )
 
@@ -161,7 +161,7 @@ peaks_df = st.data_editor(
     use_container_width=True,
     key="peaks_editor"
 )
-st.caption("※ 피크 중심 이동 허용 범위(Tolerance)는 **0.2 ~ 0.3 eV** 설정을 권장합니다.")
+st.caption("※ 각주: 피크 중심 이동 허용 범위(Tolerance)는 **0.2 ~ 0.3 eV** 설정을 권장합니다.")
 
 if uploaded_file is not None:
     try:
@@ -359,4 +359,4 @@ if uploaded_file is not None:
     except Exception as e:
         st.error(f"처리 중 오류가 발생했습니다: {e}")
 else:
-    st.info("왼쪽 사이드바에서 XPS 데이터 파일(`.txt`)을 업로드해 주세요.")
+    st.info("왼쪽 사이드바에서 XPS 데이터 파일(`.txt`, `.csv`, `.dat`)을 업로드해 주세요.")
