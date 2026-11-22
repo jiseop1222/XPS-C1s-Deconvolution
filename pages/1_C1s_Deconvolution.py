@@ -1,17 +1,25 @@
 import io
+from pathlib import Path
+import sys
 import numpy as np
 import pandas as pd
 import matplotlib.pyplot as plt
 import streamlit as st
 from lmfit import Model, Parameters
 
-st.set_page_config(page_title="XPS C1s Deconvolution", layout="wide")
-st.title("🔬 XPS C1s Auto Deconvolution Web App")
-st.caption("Colab Pseudo-Voigt (lmfit) 피팅 로직 기반 웹 애플리케이션")
+ROOT_DIR = Path(__file__).resolve().parent.parent
+if str(ROOT_DIR) not in sys.path:
+    sys.path.insert(0, str(ROOT_DIR))
 
-# ---------------------------------------------------------
-# 1. Helper Functions
-# ---------------------------------------------------------
+from auth_db import require_login, save_history_record
+
+st.set_page_config(page_title="XPS C1s Deconvolution", layout="wide")
+current_user = require_login()
+
+st.title("🔬 XPS C1s Auto Deconvolution Web App")
+st.caption(f"로그인 계정: {current_user['email']} · Colab Pseudo-Voigt (lmfit) 피팅 로직 기반")
+
+
 def sanitize_prefix(name: str) -> str:
     replacements = {
         "/": "_", "=": "_", " ": "_", "–": "_", "-": "_",
@@ -22,6 +30,7 @@ def sanitize_prefix(name: str) -> str:
         res = res.replace(k, v)
     return res.strip("_") + "_"
 
+
 def auto_align(x: np.ndarray, y: np.ndarray, target_peak: float = 284.4, search_min: float = 283.0, search_max: float = 286.0):
     mask = (x >= search_min) & (x <= search_max)
     if np.any(mask):
@@ -30,11 +39,11 @@ def auto_align(x: np.ndarray, y: np.ndarray, target_peak: float = 284.4, search_
         return x + shift, shift, peak_pos
     return x, 0.0, None
 
+
 def remove_background(x: np.ndarray, y: np.ndarray, mode: str, bg_start: float, bg_end: float):
     if mode == "None":
         return y.copy(), np.zeros_like(y)
 
-    # x 축 정렬 보장 (오름차순 기준 계산 후 원래 순서 유지)
     order = np.argsort(x)
     x_sorted = x[order]
     y_sorted = y[order]
@@ -64,7 +73,6 @@ def remove_background(x: np.ndarray, y: np.ndarray, mode: str, bg_start: float, 
 
         for _ in range(30):
             rem = np.maximum(seg_y - bg_seg, 0.0)
-            # 누적 적분 계산
             cum_area = np.zeros_like(rem)
             if len(seg_x) > 1:
                 dx = np.diff(seg_x)
@@ -83,19 +91,17 @@ def remove_background(x: np.ndarray, y: np.ndarray, mode: str, bg_start: float, 
         bg_sorted[idx_lo:idx_hi + 1] = bg_seg
         bg_sorted[idx_hi + 1:] = y_right
 
-    # 원래 x 순서로 복원
     bg_restored = np.empty_like(bg_sorted)
     bg_restored[order] = bg_sorted
     return y - bg_restored, bg_restored
+
 
 def pseudo_voigt(x, amplitude, center, sigma, fraction_lorentzian):
     g = amplitude * np.exp(-((x - center) ** 2) / (2 * sigma ** 2))
     l = amplitude * (1.0 / (1.0 + ((x - center) / sigma) ** 2))
     return (1.0 - fraction_lorentzian) * g + fraction_lorentzian * l
 
-# ---------------------------------------------------------
-# 2. Sidebar: 데이터 업로드 & 전처리 설정
-# ---------------------------------------------------------
+
 with st.sidebar:
     st.header("1. XPS 데이터 업로드")
     uploaded_file = st.file_uploader("Binding Energy, Intensity 파일 (.txt, .csv, .dat)", type=["txt", "csv", "dat"])
@@ -117,12 +123,8 @@ with st.sidebar:
     fix_sigma = st.checkbox("Sigma 고정", value=False)
     init_lorentz = st.slider("초기 Lorentzian 비율", min_value=0.0, max_value=1.0, value=0.5, step=0.05)
 
-# ---------------------------------------------------------
-# 3. Main Area: 결합 에너지 피크 설정 & 실행
-# ---------------------------------------------------------
-st.subheader("결합 에너지(Binding Energy) 피크 목록 설정")
-st.write("원하는 피크를 추가·수정·삭제할 수 있습니다. (기본값은 기존 C1s 레퍼런스 기준)")
 
+st.subheader("결합 에너지(Binding Energy) 피크 목록 설정")
 default_peaks_df = pd.DataFrame([
     {"Peak Name": "C-C sp2", "Center (eV)": 284.40, "Tolerance (±eV)": 0.30},
     {"Peak Name": "C–N/C–C sp3", "Center (eV)": 286.00, "Tolerance (±eV)": 0.30},
@@ -141,7 +143,6 @@ peaks_df = st.data_editor(
 if uploaded_file is not None:
     try:
         raw_bytes = uploaded_file.getvalue().decode("utf-8", errors="ignore")
-        # 공백/탭/콤마 구분 자동 처리
         lines = [ln.strip().replace(",", " ") for ln in raw_bytes.splitlines() if ln.strip()]
         numeric_rows = []
         for ln in lines:
@@ -183,7 +184,7 @@ if uploaded_file is not None:
             params = Parameters()
             peak_entries = []
 
-            for idx, row in valid_peaks.iterrows():
+            for _, row in valid_peaks.iterrows():
                 name = str(row["Peak Name"]).strip()
                 center_val = float(row["Center (eV)"])
                 tol_val = float(row["Tolerance (±eV)"]) if pd.notna(row["Tolerance (±eV)"]) else 0.3
@@ -204,7 +205,6 @@ if uploaded_file is not None:
 
             result = full_model.fit(corrected_intensity, params, x=be_aligned)
 
-            # R^2 계산
             ss_res = np.sum((corrected_intensity - result.best_fit) ** 2)
             ss_tot = np.sum((corrected_intensity - np.mean(corrected_intensity)) ** 2)
             r2_score = 1.0 - (ss_res / ss_tot) if ss_tot > 0 else 0.0
@@ -212,7 +212,6 @@ if uploaded_file is not None:
             st.divider()
             st.subheader(f"Deconvolution 결과 (R² = {r2_score:.5f})")
 
-            # 피크별 기여도 및 파라미터 요약
             amps = {name: result.params[f"{prefix}amplitude"].value for name, prefix in peak_entries}
             total_amp = sum(amps.values())
 
@@ -248,7 +247,6 @@ if uploaded_file is not None:
             summary_df = pd.DataFrame(summary_rows)
             st.dataframe(summary_df, use_container_width=True)
 
-            # 그래프 시각화 (XPS 관례에 따라 Binding Energy X축 반전)
             fig, ax = plt.subplots(figsize=(10, 6))
             ax.plot(be_aligned, corrected_intensity, "r.", markersize=3, label="Corrected Data")
             ax.plot(be_aligned, result.best_fit, "k-", lw=2.0, label="Total Fit")
@@ -264,7 +262,6 @@ if uploaded_file is not None:
             ax.legend(loc="best", fontsize=8)
             st.pyplot(fig)
 
-            # 결과 파일 다운로드 (.txt / .csv)
             export_cols = [be_aligned, int_raw, corrected_intensity, result.best_fit] + [comp_curves[n] for n, _ in peak_entries]
             export_headers = ["BindingEnergy(eV)", "RawIntensity(a.u.)", "CorrectedIntensity(a.u.)", "TotalFit(a.u.)"] + [
                 f"{sanitize_prefix(n).strip('_')}" for n, _ in peak_entries
@@ -294,6 +291,47 @@ if uploaded_file is not None:
 
             with st.expander("lmfit 상세 피팅 리포트 보기"):
                 st.text(result.fit_report(min_correl=0.5))
+
+            peak_list = [
+                {
+                    "Peak Name": str(row["Peak Name"]).strip(),
+                    "Center (eV)": float(row["Center (eV)"]),
+                    "Tolerance (±eV)": float(row["Tolerance (±eV)"]) if pd.notna(row["Tolerance (±eV)"]) else 0.3,
+                }
+                for _, row in valid_peaks.iterrows()
+            ]
+
+            saved_name = save_history_record(
+                owner_email=current_user["email"],
+                element="C1s",
+                uploaded_filename=uploaded_file.name,
+                bg_mode=bg_mode,
+                lorentzian_ratio=init_lorentz,
+                payload={
+                    "element": "C1s",
+                    "uploaded_filename": uploaded_file.name,
+                    "r2_score": round(float(r2_score), 6),
+                    "peak_alignment": {
+                        "enabled": bool(enable_align),
+                        "target_peak_eV": float(target_peak),
+                        "range_eV": [float(search_min), float(search_max)],
+                    },
+                    "background": {
+                        "method": bg_mode,
+                        "range_eV": [float(bg_start), float(bg_end)],
+                    },
+                    "fitting_options": {
+                        "initial_amplitude": float(init_amp),
+                        "initial_sigma_eV": float(init_sigma),
+                        "fix_sigma": bool(fix_sigma),
+                        "initial_lorentzian_ratio": float(init_lorentz),
+                    },
+                    "binding_energy_peaks": peak_list,
+                    "fitted_summary": summary_df.to_dict(orient="records"),
+                    "deconvolved_data": csv_df.to_dict(orient="records"),
+                },
+            )
+            st.success(f"영구 저장 완료 ({current_user['email']}): `{saved_name}`")
 
     except Exception as e:
         st.error(f"처리 중 오류가 발생했습니다: {e}")
