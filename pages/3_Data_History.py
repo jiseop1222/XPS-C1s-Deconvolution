@@ -11,20 +11,21 @@ if str(ROOT_DIR) not in sys.path:
 
 from auth_db import delete_history_record, fetch_history_records, require_login
 
-st.set_page_config(page_title="XPS Data History", layout="wide")
+st.set_page_config(page_title="History · XPS Deconvolution", page_icon="◈", layout="wide")
 current_user = require_login()
 is_host = current_user.get("role") == "host"
 
-st.title("📜 XPS Deconvolution Data History")
+st.caption("HOME / DATA HISTORY")
+st.title("◈ Data History")
 if is_host:
-    st.caption(f"👑 호스트 모드 ({current_user['email']}) — 전체 사용자 기록 조회 및 다운로드 가능")
+    st.caption(f"Host view (`{current_user['email']}`) · All user records")
 else:
-    st.caption(f"👤 사용자 모드 ({current_user['email']}) — 본인 기록만 조회 가능")
+    st.caption(f"User view (`{current_user['email']}`) · Own records only")
 
 records = fetch_history_records(current_user)
 
 if not records:
-    st.info("조회 가능한 History 기록이 없습니다.")
+    st.info("No history records available.")
     st.stop()
 
 available_elements = sorted({r.get("element", "Unknown") for r in records})
@@ -33,14 +34,14 @@ available_owners = sorted({r.get("owner_email", "") for r in records if r.get("o
 f1, f2 = st.columns(2)
 with f1:
     selected_elements = st.multiselect(
-        "원소 필터",
+        "Element Filter",
         options=available_elements,
         default=available_elements,
     )
 with f2:
     if is_host:
         selected_owners = st.multiselect(
-            "작성자 필터 (호스트 전용)",
+            "Owner Filter (Host Only)",
             options=available_owners,
             default=available_owners,
         )
@@ -62,44 +63,44 @@ for idx, item in enumerate(filtered):
 
     header_parts = [base_stem, element]
     if is_host and owner:
-        header_parts.append(f"작성자: {owner}")
+        header_parts.append(owner)
     if isinstance(r2_val, (int, float)):
         header_parts.append(f"R²={r2_val:.4f}")
     if saved_at:
         header_parts.append(saved_at)
 
-    with st.expander("  |  ".join(header_parts), expanded=False):
-        st.write(f"**업로드 원본 파일:** `{item.get('uploaded_filename', '')}`")
+    with st.expander("  ·  ".join(header_parts), expanded=False):
+        st.write(f"**Source File:** `{item.get('uploaded_filename', '')}`")
         if is_host:
-            st.write(f"**작성자 계정:** `{owner}`")
+            st.write(f"**Owner:** `{owner}`")
 
         c1, c2, c3 = st.columns(3)
         with c1:
             st.markdown("**Peak Alignment**")
             align_info = item.get("peak_alignment", {})
-            st.write(f"- 활성 여부: `{align_info.get('enabled')}`")
-            st.write(f"- 기준 피크: `{align_info.get('target_peak_eV')} eV`")
+            st.write(f"- Enabled: `{align_info.get('enabled')}`")
+            st.write(f"- Reference Peak: `{align_info.get('target_peak_eV')} eV`")
             rng = align_info.get("range_eV", [None, None])
-            st.write(f"- 탐색 범위: `{rng[0]} ~ {rng[1]} eV`")
+            st.write(f"- Search Range: `{rng[0]} – {rng[1]} eV`")
         with c2:
-            st.markdown("**Background 제거**")
+            st.markdown("**Background**")
             bg_info = item.get("background", {})
-            st.write(f"- 방식: `{bg_info.get('method')}`")
+            st.write(f"- Method: `{bg_info.get('method')}`")
             bg_rng = bg_info.get("range_eV", [None, None])
-            st.write(f"- 범위: `{bg_rng[0]} ~ {bg_rng[1]} eV`")
+            st.write(f"- Range: `{bg_rng[0]} – {bg_rng[1]} eV`")
         with c3:
-            st.markdown("**Fitting 옵션**")
+            st.markdown("**Fitting Options**")
             fit_info = item.get("fitting_options", {})
-            st.write(f"- 초기 Amplitude: `{fit_info.get('initial_amplitude')}`")
-            st.write(f"- 초기 Sigma: `{fit_info.get('initial_sigma_eV')} eV` (고정: `{fit_info.get('fix_sigma')}`)")
-            st.write(f"- 초기 Lorentzian ratio: `{fit_info.get('initial_lorentzian_ratio')}`")
+            st.write(f"- Initial Amplitude: `{fit_info.get('initial_amplitude')}`")
+            st.write(f"- Initial Sigma: `{fit_info.get('initial_sigma_eV')} eV` (Fixed: `{fit_info.get('fix_sigma')}`)")
+            st.write(f"- Initial Lorentzian Ratio: `{fit_info.get('initial_lorentzian_ratio')}`")
 
-        st.markdown("**Binding Energy Peak 목록**")
+        st.markdown("**Peaks**")
         peaks_list = item.get("binding_energy_peaks", [])
         if peaks_list:
             st.dataframe(pd.DataFrame(peaks_list), use_container_width=True, hide_index=True)
 
-        st.markdown("**Deconvolved 데이터 미리보기 (상위 10행)**")
+        st.markdown("**Deconvolved Data Preview (Top 10 Rows)**")
         spec_df = pd.DataFrame(item.get("deconvolved_data", []))
         if not spec_df.empty:
             st.dataframe(spec_df.head(10), use_container_width=True, hide_index=True)
@@ -124,7 +125,7 @@ for idx, item in enumerate(filtered):
         d1, d2, d3, d4 = st.columns([1, 1, 1, 0.8])
         with d1:
             st.download_button(
-                label="⬇️ .json 다운로드",
+                label=".json",
                 data=json_bytes,
                 file_name=f"{base_stem}.json",
                 mime="application/json",
@@ -133,7 +134,7 @@ for idx, item in enumerate(filtered):
             )
         with d2:
             st.download_button(
-                label="⬇️ .csv 다운로드",
+                label=".csv",
                 data=csv_bytes,
                 file_name=f"{base_stem}.csv",
                 mime="text/csv",
@@ -142,7 +143,7 @@ for idx, item in enumerate(filtered):
             )
         with d3:
             st.download_button(
-                label="⬇️ .txt 다운로드",
+                label=".txt",
                 data=txt_bytes,
                 file_name=f"{base_stem}.txt",
                 mime="text/plain",
@@ -150,6 +151,6 @@ for idx, item in enumerate(filtered):
                 use_container_width=True,
             )
         with d4:
-            if st.button("🗑️ 삭제", key=f"del_{idx}", use_container_width=True):
+            if st.button("Delete", key=f"del_{idx}", use_container_width=True):
                 delete_history_record(item["_db_id"], current_user)
                 st.rerun()
